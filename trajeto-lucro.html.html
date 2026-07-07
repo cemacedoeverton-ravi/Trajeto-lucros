@@ -1,0 +1,559 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="theme-color" content="#14171C">
+<title>Trajeto&Lucro</title>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.css" />
+<style>
+  :root{
+    --bg:#14171C;
+    --surface:#1C2028;
+    --surface-2:#242A34;
+    --border:#2E333D;
+    --accent:#FFB020;
+    --accent-dim:#4A3B1A;
+    --profit:#34D399;
+    --expense:#F87171;
+    --text:#ECEEF1;
+    --text-dim:#8B93A3;
+    --mono: 'SF Mono', 'SFMono-Regular', Consolas, 'Roboto Mono', monospace;
+    --sans: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{margin:0;padding:0;height:100%;background:var(--bg);color:var(--text);font-family:var(--sans);overflow-x:hidden;}
+  #app{display:flex;flex-direction:column;height:100vh;height:100dvh;max-width:520px;margin:0 auto;position:relative;}
+
+  header.top{
+    padding:16px 18px 10px;
+    display:flex;align-items:center;justify-content:space-between;
+    border-bottom:1px solid var(--border);
+    background:linear-gradient(180deg, var(--surface) 0%, var(--bg) 100%);
+  }
+  header.top .brand{display:flex;align-items:center;gap:10px;}
+  header.top .dot{width:10px;height:10px;border-radius:50%;background:var(--accent);box-shadow:0 0 8px var(--accent);}
+  header.top h1{font-size:16px;font-weight:700;margin:0;letter-spacing:0.2px;}
+  header.top .sub{font-size:11px;color:var(--text-dim);font-family:var(--mono);}
+  header.top .today{font-size:11px;color:var(--text-dim);text-align:right;font-family:var(--mono);}
+
+  main{flex:1;overflow-y:auto;padding:14px 14px 90px;}
+  .tab{display:none;}
+  .tab.active{display:block;animation:fade .18s ease;}
+  @keyframes fade{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+
+  nav.bottom{
+    position:absolute;bottom:0;left:0;right:0;
+    display:flex;border-top:1px solid var(--border);
+    background:var(--surface);
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  nav.bottom button{
+    flex:1;background:none;border:none;color:var(--text-dim);
+    padding:12px 4px 10px;font-family:var(--sans);font-size:11px;
+    display:flex;flex-direction:column;align-items:center;gap:4px;
+  }
+  nav.bottom button svg{width:20px;height:20px;}
+  nav.bottom button.active{color:var(--accent);}
+
+  .card{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:16px;margin-bottom:12px;}
+  .card h2{font-size:12px;text-transform:uppercase;letter-spacing:0.6px;color:var(--text-dim);margin:0 0 12px;font-weight:600;}
+
+  .stat-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+  .stat{background:var(--surface-2);border-radius:10px;padding:12px;}
+  .stat .label{font-size:10.5px;color:var(--text-dim);text-transform:uppercase;letter-spacing:0.4px;}
+  .stat .value{font-family:var(--mono);font-size:22px;font-weight:700;margin-top:4px;letter-spacing:-0.5px;}
+  .stat .value.profit{color:var(--profit);}
+  .stat .value.expense{color:var(--expense);}
+  .stat .value.accent{color:var(--accent);}
+
+  .turno-box{display:flex;align-items:center;gap:12px;padding:14px;background:var(--surface-2);border-radius:12px;margin-bottom:12px;}
+  .turno-box .pulse{width:12px;height:12px;border-radius:50%;background:var(--text-dim);flex-shrink:0;}
+  .turno-box.live .pulse{background:var(--profit);box-shadow:0 0 0 rgba(52,211,153,0.6);animation:pulse 1.6s infinite;}
+  @keyframes pulse{0%{box-shadow:0 0 0 0 rgba(52,211,153,0.5);}70%{box-shadow:0 0 0 10px rgba(52,211,153,0);}100%{box-shadow:0 0 0 0 rgba(52,211,153,0);}}
+  .turno-box .info{flex:1;}
+  .turno-box .info .t1{font-size:13px;font-weight:600;}
+  .turno-box .info .t2{font-size:11px;color:var(--text-dim);font-family:var(--mono);margin-top:2px;}
+
+  button.primary{
+    background:var(--accent);color:#1A1300;border:none;border-radius:10px;
+    padding:13px 16px;font-size:14px;font-weight:700;width:100%;font-family:var(--sans);
+  }
+  button.stop{background:var(--expense);color:#2A0000;}
+  button.ghost{
+    background:transparent;border:1px solid var(--border);color:var(--text);
+    border-radius:10px;padding:12px;font-size:13px;width:100%;font-family:var(--sans);
+  }
+
+  .field{margin-bottom:12px;}
+  .field label{display:block;font-size:11.5px;color:var(--text-dim);margin-bottom:6px;text-transform:uppercase;letter-spacing:0.4px;}
+  .field .input-wrap{display:flex;align-items:center;background:var(--surface-2);border:1px solid var(--border);border-radius:10px;padding:0 12px;}
+  .field .input-wrap .prefix{color:var(--text-dim);font-family:var(--mono);font-size:14px;margin-right:6px;}
+  .field input{
+    background:none;border:none;outline:none;color:var(--text);font-family:var(--mono);
+    font-size:16px;padding:11px 0;width:100%;
+  }
+  .row2{display:grid;grid-template-columns:1fr 1fr;gap:10px;}
+
+  #map{width:100%;height:260px;border-radius:14px;overflow:hidden;border:1px solid var(--border);}
+  .map-stats{display:flex;gap:10px;margin-top:10px;}
+  .map-stats .chip{flex:1;background:var(--surface-2);border-radius:10px;padding:10px;text-align:center;}
+  .map-stats .chip .v{font-family:var(--mono);font-weight:700;font-size:16px;}
+  .map-stats .chip .l{font-size:10px;color:var(--text-dim);text-transform:uppercase;margin-top:2px;}
+
+  .day-row{
+    display:flex;align-items:center;justify-content:space-between;
+    padding:12px 4px;border-bottom:1px solid var(--border);cursor:pointer;
+  }
+  .day-row:last-child{border-bottom:none;}
+  .day-row .d1{font-size:13px;font-weight:600;}
+  .day-row .d2{font-size:11px;color:var(--text-dim);font-family:var(--mono);}
+  .day-row .d3{text-align:right;}
+  .day-row .d3 .g{font-family:var(--mono);font-weight:700;color:var(--profit);font-size:14px;}
+  .day-row .d3 .k{font-size:10.5px;color:var(--text-dim);font-family:var(--mono);}
+
+  .empty{text-align:center;padding:40px 20px;color:var(--text-dim);font-size:13px;}
+
+  #dayDetail{position:fixed;inset:0;background:rgba(0,0,0,0.6);z-index:50;display:none;align-items:flex-end;}
+  #dayDetail.show{display:flex;}
+  #dayDetail .sheet{
+    background:var(--surface);width:100%;max-width:520px;margin:0 auto;
+    border-radius:18px 18px 0 0;padding:18px;max-height:85vh;overflow-y:auto;
+  }
+  #dayDetail .sheet .close{width:36px;height:4px;background:var(--border);border-radius:2px;margin:0 auto 14px;}
+  #dayDetailMap{width:100%;height:180px;border-radius:12px;margin-top:10px;overflow:hidden;}
+
+  ::-webkit-scrollbar{width:0;height:0;}
+</style>
+</head>
+<body>
+<div id="app">
+  <header class="top">
+    <div class="brand">
+      <div class="dot"></div>
+      <div>
+        <h1>Trajeto&amp;Lucro</h1>
+        <div class="sub">painel do motorista</div>
+      </div>
+    </div>
+    <div class="today" id="todayLabel"></div>
+  </header>
+
+  <main>
+    <!-- TAB HOJE -->
+    <section class="tab active" id="tab-hoje">
+      <div class="turno-box" id="turnoBox">
+        <div class="pulse"></div>
+        <div class="info">
+          <div class="t1" id="turnoStatus">Turno parado</div>
+          <div class="t2" id="turnoInfo">0,0 km rastreados hoje</div>
+        </div>
+      </div>
+      <button class="primary" id="btnTurno" style="margin-bottom:14px;">Iniciar turno (GPS)</button>
+
+      <div class="card">
+        <h2>Resumo de hoje</h2>
+        <div class="stat-grid">
+          <div class="stat"><div class="label">Ganho bruto</div><div class="value accent" id="statGanho">R$ 0,00</div></div>
+          <div class="stat"><div class="label">Corridas</div><div class="value" id="statCorridas">0</div></div>
+          <div class="stat"><div class="label">Km rodado</div><div class="value" id="statKm">0,0</div></div>
+          <div class="stat"><div class="label">R$ / km</div><div class="value" id="statRkm">—</div></div>
+          <div class="stat"><div class="label">Gastos</div><div class="value expense" id="statGastos">R$ 0,00</div></div>
+          <div class="stat"><div class="label">Lucro líquido</div><div class="value profit" id="statLucro">R$ 0,00</div></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <h2>Lançar dados do dia</h2>
+        <div class="field">
+          <label>Ganho bruto total (R$)</label>
+          <div class="input-wrap"><span class="prefix">R$</span><input type="number" inputmode="decimal" id="inGanho" placeholder="0,00"></div>
+        </div>
+        <div class="field">
+          <label>Número de corridas</label>
+          <div class="input-wrap"><input type="number" inputmode="numeric" id="inCorridas" placeholder="0"></div>
+        </div>
+        <div class="row2">
+          <div class="field">
+            <label>Combustível (R$)</label>
+            <div class="input-wrap"><span class="prefix">R$</span><input type="number" inputmode="decimal" id="inCombustivel" placeholder="0,00"></div>
+          </div>
+          <div class="field">
+            <label>Alimentação (R$)</label>
+            <div class="input-wrap"><span class="prefix">R$</span><input type="number" inputmode="decimal" id="inAlimentacao" placeholder="0,00"></div>
+          </div>
+        </div>
+        <button class="primary" id="btnSalvarDia">Salvar dados do dia</button>
+      </div>
+    </section>
+
+    <!-- TAB MAPA -->
+    <section class="tab" id="tab-mapa">
+      <div class="card" style="padding:10px;">
+        <div id="map"></div>
+        <div class="map-stats">
+          <div class="chip"><div class="v" id="mapKm">0,0 km</div><div class="l">distância</div></div>
+          <div class="chip"><div class="v" id="mapPontos">0</div><div class="l">pontos GPS</div></div>
+          <div class="chip"><div class="v" id="mapTempo">0min</div><div class="l">tempo ativo</div></div>
+        </div>
+      </div>
+      <button class="ghost" id="btnLimparTrajeto">Limpar trajeto de hoje</button>
+    </section>
+
+    <!-- TAB HISTORICO -->
+    <section class="tab" id="tab-historico">
+      <div class="card">
+        <h2>Últimos 7 dias</h2>
+        <div class="stat-grid">
+          <div class="stat"><div class="label">Ganho total</div><div class="value accent" id="h7Ganho">R$ 0,00</div></div>
+          <div class="stat"><div class="label">Lucro líquido</div><div class="value profit" id="h7Lucro">R$ 0,00</div></div>
+        </div>
+      </div>
+      <div class="card" id="historicoLista">
+        <h2>Histórico por dia</h2>
+        <div id="diasContainer"><div class="empty">Nenhum dia salvo ainda.</div></div>
+      </div>
+    </section>
+  </main>
+
+  <nav class="bottom">
+    <button data-tab="tab-hoje" class="active">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 3v18m9-9H3"/></svg>
+      Hoje
+    </button>
+    <button data-tab="tab-mapa">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M9 20l-5.447-2.724A1 1 0 013 16.382V5.618a1 1 0 011.447-.894L9 7m0 13l6-3m-6 3V7m6 10l4.553 2.276A1 1 0 0021 18.382V7.618a1 1 0 00-.553-.894L15 4m0 13V4m0 0L9 7"/></svg>
+      Mapa
+    </button>
+    <button data-tab="tab-historico">
+      <svg fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"/></svg>
+      Histórico
+    </button>
+  </nav>
+</div>
+
+<div id="dayDetail">
+  <div class="sheet">
+    <div class="close"></div>
+    <div id="dayDetailContent"></div>
+  </div>
+</div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/leaflet/1.9.4/leaflet.min.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---------- Helpers ----------
+  const fmtBRL = v => 'R$ ' + (v||0).toLocaleString('pt-BR',{minimumFractionDigits:2, maximumFractionDigits:2});
+  const fmtKm = v => (v||0).toLocaleString('pt-BR',{minimumFractionDigits:1, maximumFractionDigits:1});
+  const todayKey = () => {
+    const d = new Date();
+    return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+  };
+  const fmtDateLabel = (key) => {
+    const [y,m,d] = key.split('-');
+    return d+'/'+m+'/'+y;
+  };
+  function haversine(lat1,lon1,lat2,lon2){
+    const R=6371000;
+    const toRad = x => x*Math.PI/180;
+    const dLat = toRad(lat2-lat1);
+    const dLon = toRad(lon2-lon1);
+    const a = Math.sin(dLat/2)**2 + Math.cos(toRad(lat1))*Math.cos(toRad(lat2))*Math.sin(dLon/2)**2;
+    return R * 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1-a));
+  }
+
+  // ---------- Storage ----------
+  const STORE_KEY = 'trajetoLucro_days_v1';
+  function loadDays(){
+    try{ return JSON.parse(localStorage.getItem(STORE_KEY)) || {}; }
+    catch(e){ return {}; }
+  }
+  function saveDays(days){
+    localStorage.setItem(STORE_KEY, JSON.stringify(days));
+  }
+  function getDay(key){
+    const days = loadDays();
+    if(!days[key]){
+      days[key] = { ganho:0, corridas:0, combustivel:0, alimentacao:0, km:0, route:[], activeSeconds:0 };
+    }
+    return days[key];
+  }
+  function setDay(key, dayObj){
+    const days = loadDays();
+    days[key] = dayObj;
+    saveDays(days);
+  }
+
+  let days = loadDays();
+  const key = todayKey();
+  let today = getDay(key);
+
+  // ---------- Tabs ----------
+  const tabs = document.querySelectorAll('.tab');
+  const navBtns = document.querySelectorAll('nav.bottom button');
+  navBtns.forEach(btn=>{
+    btn.addEventListener('click', ()=>{
+      navBtns.forEach(b=>b.classList.remove('active'));
+      tabs.forEach(t=>t.classList.remove('active'));
+      btn.classList.add('active');
+      document.getElementById(btn.dataset.tab).classList.add('active');
+      if(btn.dataset.tab === 'tab-mapa'){ setTimeout(()=>{ map.invalidateSize(); fitRoute(); }, 50); }
+    });
+  });
+
+  document.getElementById('todayLabel').textContent = fmtDateLabel(key);
+
+  // ---------- Map setup ----------
+  const map = L.map('map', {zoomControl:false, attributionControl:false}).setView([-23.5505,-46.6333], 14);
+  L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(map);
+  let routeLine = L.polyline([], {color:'#FFB020', weight:4, opacity:0.9}).addTo(map);
+  let startMarker = null, endMarker = null;
+
+  function redrawRoute(){
+    const latlngs = today.route.map(p=>[p.lat,p.lng]);
+    routeLine.setLatLngs(latlngs);
+    if(startMarker){ map.removeLayer(startMarker); startMarker=null; }
+    if(endMarker){ map.removeLayer(endMarker); endMarker=null; }
+    if(latlngs.length){
+      startMarker = L.circleMarker(latlngs[0], {radius:6, color:'#34D399', fillColor:'#34D399', fillOpacity:1}).addTo(map);
+      endMarker = L.circleMarker(latlngs[latlngs.length-1], {radius:6, color:'#FFB020', fillColor:'#FFB020', fillOpacity:1}).addTo(map);
+    }
+  }
+  function fitRoute(){
+    if(today.route.length > 1){
+      map.fitBounds(routeLine.getBounds(), {padding:[20,20]});
+    } else if (today.route.length === 1){
+      map.setView([today.route[0].lat, today.route[0].lng], 16);
+    }
+  }
+  redrawRoute();
+
+  // ---------- GPS tracking ----------
+  let watchId = null;
+  let liveTimer = null;
+  let sessionStartTs = null;
+  const turnoBox = document.getElementById('turnoBox');
+  const btnTurno = document.getElementById('btnTurno');
+  const turnoStatus = document.getElementById('turnoStatus');
+  const turnoInfo = document.getElementById('turnoInfo');
+
+  function refreshTurnoUI(){
+    turnoInfo.textContent = fmtKm(today.km/1000) + ' km rastreados hoje';
+  }
+
+  function startTurno(){
+    if(!('geolocation' in navigator)){
+      alert('Este dispositivo/navegador não tem suporte a GPS.');
+      return;
+    }
+    sessionStartTs = Date.now();
+    watchId = navigator.geolocation.watchPosition(onPosition, onPosError, {
+      enableHighAccuracy:true, maximumAge:2000, timeout:15000
+    });
+    turnoBox.classList.add('live');
+    turnoStatus.textContent = 'Turno ativo — rastreando...';
+    btnTurno.textContent = 'Encerrar turno';
+    btnTurno.classList.add('stop');
+    liveTimer = setInterval(()=>{
+      const mins = Math.round((Date.now()-sessionStartTs)/60000);
+      document.getElementById('mapTempo').textContent = mins + 'min';
+    }, 30000);
+  }
+  function stopTurno(){
+    if(watchId !== null){ navigator.geolocation.clearWatch(watchId); watchId = null; }
+    if(liveTimer){ clearInterval(liveTimer); liveTimer=null; }
+    turnoBox.classList.remove('live');
+    turnoStatus.textContent = 'Turno parado';
+    btnTurno.textContent = 'Iniciar turno (GPS)';
+    btnTurno.classList.remove('stop');
+    setDay(key, today);
+  }
+  let lastPoint = null;
+  function onPosition(pos){
+    const {latitude:lat, longitude:lng, accuracy} = pos.coords;
+    if(accuracy && accuracy > 60) return; // ignora leituras muito imprecisas
+    if(lastPoint){
+      const d = haversine(lastPoint.lat, lastPoint.lng, lat, lng);
+      if(d > 4000) return; // ignora saltos absurdos (erro de GPS)
+      if(d < 3) return; // ignora ruído parado
+      today.km += d;
+    }
+    lastPoint = {lat,lng};
+    today.route.push({lat,lng,t:Date.now()});
+    setDay(key, today);
+    redrawRoute();
+    updateDashboard();
+    document.getElementById('mapPontos').textContent = today.route.length;
+    document.getElementById('mapKm').textContent = fmtKm(today.km/1000) + ' km';
+  }
+  function onPosError(err){
+    console.warn('GPS erro', err);
+  }
+  btnTurno.addEventListener('click', ()=>{
+    if(watchId === null) startTurno(); else stopTurno();
+  });
+  document.getElementById('btnLimparTrajeto').addEventListener('click', ()=>{
+    if(confirm('Limpar todo o trajeto GPS de hoje? O km e mapa de hoje serão zerados.')){
+      today.km = 0; today.route = []; lastPoint = null;
+      setDay(key, today);
+      redrawRoute();
+      updateDashboard();
+      document.getElementById('mapKm').textContent = '0,0 km';
+      document.getElementById('mapPontos').textContent = '0';
+    }
+  });
+
+  // ---------- Inputs do dia ----------
+  const inGanho = document.getElementById('inGanho');
+  const inCorridas = document.getElementById('inCorridas');
+  const inCombustivel = document.getElementById('inCombustivel');
+  const inAlimentacao = document.getElementById('inAlimentacao');
+
+  inGanho.value = today.ganho || '';
+  inCorridas.value = today.corridas || '';
+  inCombustivel.value = today.combustivel || '';
+  inAlimentacao.value = today.alimentacao || '';
+
+  document.getElementById('btnSalvarDia').addEventListener('click', ()=>{
+    today.ganho = parseFloat(inGanho.value) || 0;
+    today.corridas = parseInt(inCorridas.value) || 0;
+    today.combustivel = parseFloat(inCombustivel.value) || 0;
+    today.alimentacao = parseFloat(inAlimentacao.value) || 0;
+    setDay(key, today);
+    updateDashboard();
+    renderHistorico();
+    const btn = document.getElementById('btnSalvarDia');
+    const original = btn.textContent;
+    btn.textContent = 'Salvo ✓';
+    setTimeout(()=>{ btn.textContent = original; }, 1400);
+  });
+
+  function updateDashboard(){
+    const kmRodado = today.km/1000;
+    const gastos = (today.combustivel||0) + (today.alimentacao||0);
+    const lucro = (today.ganho||0) - gastos;
+    const rkm = kmRodado > 0 ? (today.ganho||0)/kmRodado : null;
+
+    document.getElementById('statGanho').textContent = fmtBRL(today.ganho);
+    document.getElementById('statCorridas').textContent = today.corridas || 0;
+    document.getElementById('statKm').textContent = fmtKm(kmRodado);
+    document.getElementById('statRkm').textContent = rkm !== null ? fmtBRL(rkm) : '—';
+    document.getElementById('statGastos').textContent = fmtBRL(gastos);
+    document.getElementById('statLucro').textContent = fmtBRL(lucro);
+    document.getElementById('statLucro').className = 'value ' + (lucro>=0?'profit':'expense');
+
+    document.getElementById('mapKm').textContent = fmtKm(kmRodado) + ' km';
+    document.getElementById('mapPontos').textContent = today.route.length;
+    refreshTurnoUI();
+  }
+
+  // ---------- Histórico ----------
+  function allDaysSorted(){
+    days = loadDays();
+    return Object.keys(days).sort((a,b)=> b.localeCompare(a));
+  }
+  function renderHistorico(){
+    const keys = allDaysSorted();
+    const container = document.getElementById('diasContainer');
+    if(keys.length === 0){
+      container.innerHTML = '<div class="empty">Nenhum dia salvo ainda.</div>';
+    } else {
+      container.innerHTML = '';
+      keys.forEach(k=>{
+        const d = days[k];
+        const kmR = (d.km||0)/1000;
+        const gastos = (d.combustivel||0)+(d.alimentacao||0);
+        const lucro = (d.ganho||0) - gastos;
+        const row = document.createElement('div');
+        row.className = 'day-row';
+        row.innerHTML = `
+          <div>
+            <div class="d1">${fmtDateLabel(k)}</div>
+            <div class="d2">${d.corridas||0} corridas · ${fmtKm(kmR)} km</div>
+          </div>
+          <div class="d3">
+            <div class="g">${fmtBRL(lucro)}</div>
+            <div class="k">${fmtBRL(d.ganho||0)} bruto</div>
+          </div>`;
+        row.addEventListener('click', ()=> openDayDetail(k));
+        container.appendChild(row);
+      });
+    }
+
+    // últimos 7 dias
+    const now = new Date();
+    let ganho7=0, lucro7=0;
+    keys.forEach(k=>{
+      const [y,m,dd] = k.split('-').map(Number);
+      const dt = new Date(y,m-1,dd);
+      const diffDays = (now - dt)/(1000*60*60*24);
+      if(diffDays <= 6.5){
+        const d = days[k];
+        const gastos = (d.combustivel||0)+(d.alimentacao||0);
+        ganho7 += (d.ganho||0);
+        lucro7 += (d.ganho||0) - gastos;
+      }
+    });
+    document.getElementById('h7Ganho').textContent = fmtBRL(ganho7);
+    document.getElementById('h7Lucro').textContent = fmtBRL(lucro7);
+  }
+
+  let detailMap = null;
+  function openDayDetail(k){
+    const d = days[k];
+    const kmR = (d.km||0)/1000;
+    const gastos = (d.combustivel||0)+(d.alimentacao||0);
+    const lucro = (d.ganho||0) - gastos;
+    const rkm = kmR>0 ? (d.ganho||0)/kmR : null;
+    const content = document.getElementById('dayDetailContent');
+    content.innerHTML = `
+      <h2 style="margin-top:0;">${fmtDateLabel(k)}</h2>
+      <div class="stat-grid">
+        <div class="stat"><div class="label">Ganho bruto</div><div class="value accent">${fmtBRL(d.ganho)}</div></div>
+        <div class="stat"><div class="label">Corridas</div><div class="value">${d.corridas||0}</div></div>
+        <div class="stat"><div class="label">Km rodado</div><div class="value">${fmtKm(kmR)}</div></div>
+        <div class="stat"><div class="label">R$ / km</div><div class="value">${rkm!==null?fmtBRL(rkm):'—'}</div></div>
+        <div class="stat"><div class="label">Gastos</div><div class="value expense">${fmtBRL(gastos)}</div></div>
+        <div class="stat"><div class="label">Lucro líquido</div><div class="value ${lucro>=0?'profit':'expense'}">${fmtBRL(lucro)}</div></div>
+      </div>
+      <div id="dayDetailMap"></div>
+    `;
+    document.getElementById('dayDetail').classList.add('show');
+    setTimeout(()=>{
+      if(detailMap){ detailMap.remove(); detailMap=null; }
+      detailMap = L.map('dayDetailMap', {zoomControl:false, attributionControl:false, dragging:false, scrollWheelZoom:false});
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19}).addTo(detailMap);
+      const latlngs = (d.route||[]).map(p=>[p.lat,p.lng]);
+      if(latlngs.length){
+        const line = L.polyline(latlngs, {color:'#FFB020', weight:4}).addTo(detailMap);
+        detailMap.fitBounds(line.getBounds(), {padding:[15,15]});
+      } else {
+        detailMap.setView([-23.5505,-46.6333], 12);
+        document.getElementById('dayDetailMap').insertAdjacentHTML('afterend', '<div class="empty" style="padding:16px 0;">Sem trajeto GPS registrado neste dia.</div>');
+      }
+    }, 60);
+  }
+  document.getElementById('dayDetail').addEventListener('click', (e)=>{
+    if(e.target.id === 'dayDetail'){ e.currentTarget.classList.remove('show'); }
+  });
+
+  // ---------- Init ----------
+  updateDashboard();
+  renderHistorico();
+
+  // tenta centralizar mapa na localização atual ao abrir
+  if('geolocation' in navigator){
+    navigator.geolocation.getCurrentPosition(pos=>{
+      if(today.route.length === 0){
+        map.setView([pos.coords.latitude, pos.coords.longitude], 15);
+      }
+    }, ()=>{}, {enableHighAccuracy:false, maximumAge:60000, timeout:8000});
+  }
+})();
+</script>
+</body>
+</html>
